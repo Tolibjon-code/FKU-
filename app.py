@@ -7,8 +7,24 @@ import calendar
 from io import BytesIO
 import base64
 import json
-from PIL import Image
 import time
+
+# Аввал ёшини хисоблаш функциясини аниқлаш
+def calculate_age(birth_date):
+    today = date.today()
+    years = today.year - birth_date.year
+    months = today.month - birth_date.month
+    days = today.day - birth_date.day
+    
+    if days < 0:
+        months -= 1
+        days += 30
+    
+    if months < 0:
+        years -= 1
+        months += 12
+    
+    return years, months, days
 
 st.set_page_config(
     page_title="ФКУ Болалар учун Озукавий Аралашмалар Схемаси",
@@ -76,13 +92,6 @@ st.markdown("""
         box-shadow: 0 6px 12px rgba(0,0,0,0.1);
         border-color: #3B82F6;
     }
-    .dose-time-card {
-        background: linear-gradient(135deg, #E0F2FE 0%, #BAE6FD 100%);
-        padding: 1rem;
-        border-radius: 10px;
-        margin: 0.5rem 0;
-        border: 1px solid #7DD3FC;
-    }
     .metric-box {
         background: white;
         padding: 1.5rem;
@@ -105,13 +114,6 @@ st.markdown("""
         transform: translateY(-2px);
         box-shadow: 0 6px 12px rgba(37, 99, 235, 0.2);
     }
-    .tab-container {
-        background: white;
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin-top: 1rem;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
     .schedule-badge {
         display: inline-block;
         padding: 0.25rem 0.75rem;
@@ -124,27 +126,8 @@ st.markdown("""
     .day-badge { background: #D1FAE5; color: #065F46; }
     .evening-badge { background: #E0E7FF; color: #3730A3; }
     .night-badge { background: #FCE7F3; color: #9D174D; }
-    
-    /* Progress bar style */
-    .stProgress > div > div > div > div {
-        background-color: #3B82F6;
-    }
-    
-    /* Dataframe style */
-    .dataframe {
-        border-radius: 8px;
-        overflow: hidden;
-    }
-    
-    /* Sidebar style */
-    .css-1d391kg {
-        background-color: #F8FAFC;
-    }
 </style>
 """, unsafe_allow_html=True)
-
-# Асосий сарлавҳа
-st.markdown('<h1 class="main-header">🍼 Фенилкетонурия (ФКУ) Болалар учун Озукавий Аралашмалар Тизими</h1>', unsafe_allow_html=True)
 
 # Sidebar - Асосий маълумотлар
 with st.sidebar:
@@ -160,6 +143,9 @@ with st.sidebar:
         weight = st.number_input("**Огирлик (кг)**", min_value=1.0, max_value=50.0, value=12.5, step=0.1)
     
     height = st.number_input("**Бўй (см)**", min_value=30.0, max_value=200.0, value=85.0, step=0.1)
+    
+    # Бола ёшини хисоблаш
+    age_years, age_months, age_days = calculate_age(birth_date)
     
     # Фенилаланин даражаси
     st.markdown("---")
@@ -183,32 +169,33 @@ with st.sidebar:
     
     st.markdown("---")
     st.markdown("#### 📊 Статистика")
-    st.metric("ФА даражаси", f"{phe_level} мкмоль/л", 
-              f"{'⬆️ Юқори' if phe_level > target_phe else '⬇️ Паст' if phe_level < target_phe * 0.8 else '✅ Норма'}")
+    
+    # ФА даражаси кўрсаткичи
+    phe_status = ""
+    if phe_level > target_phe:
+        phe_status = "⬆️ Юқори"
+    elif phe_level < target_phe * 0.8:
+        phe_status = "⬇️ Паст"
+    else:
+        phe_status = "✅ Норма"
+    
+    st.metric("ФА даражаси", f"{phe_level} мкмоль/л", phe_status)
     
     # BMI хисоблаш
     bmi = weight / ((height/100) ** 2)
-    st.metric("БМИ (BMI)", f"{bmi:.1f}", 
-              f"{'⬆️ Ортиқча' if bmi > 18 else '⬇️ Кам' if bmi < 14 else '✅ Норма'}" if age_years > 2 else "")
-
-# Бола ёшини хисоблаш
-def calculate_age(birth_date):
-    today = date.today()
-    years = today.year - birth_date.year
-    months = today.month - birth_date.month
-    days = today.day - birth_date.day
     
-    if days < 0:
-        months -= 1
-        days += 30
+    bmi_status = ""
+    if age_years > 2:
+        if bmi > 18:
+            bmi_status = "⬆️ Ортиқча"
+        elif bmi < 14:
+            bmi_status = "⬇️ Кам"
+        else:
+            bmi_status = "✅ Норма"
+    else:
+        bmi_status = "👶 Болача"
     
-    if months < 0:
-        years -= 1
-        months += 12
-    
-    return years, months, days
-
-age_years, age_months, age_days = calculate_age(birth_date)
+    st.metric("БМИ (BMI)", f"{bmi:.1f}", bmi_status)
 
 # Озукавий аралашмалар базаси
 products_db = {
@@ -232,7 +219,7 @@ products_db = {
         "daily_dose_per_kg": 1.5,
         "calories_per_100g": 380,
         "preparation": "50г аралашма + 200мл сув ёки сут, ёхши аралаштиринг",
-        "storage": "Қуруқ жойда сақлансин, ochilgandan keyin 3 hafta ichida ishlating",
+        "storage": "Қуруқ жойда сақлансин, очилгандан кейин 3 ҳафта ичида ишлатинг",
         "price_per_kg": 125000,
         "color": "#10B981"
     },
@@ -244,7 +231,7 @@ products_db = {
         "daily_dose_per_kg": 3.5,
         "calories_per_100g": 510,
         "preparation": "35г аралашма + 150мл иссиқ сув, хомилга мос температурагача совитинг",
-        "storage": "Ўртача haroratda saqlang",
+        "storage": "Ўртача ҳароратда сақланг",
         "price_per_kg": 78000,
         "color": "#8B5CF6"
     },
@@ -256,7 +243,7 @@ products_db = {
         "daily_dose_per_kg": 2.5,
         "calories_per_100g": 450,
         "preparation": "40г аралашма + 180мл сув, миксерида аралаштиринг",
-        "storage": "Тўғридан-тўғри quyosh nuridan saqlang",
+        "storage": "Тўғридан-тўғри қуёш нуридан сақланг",
         "price_per_kg": 82000,
         "color": "#F59E0B"
     },
@@ -309,6 +296,9 @@ products_db = {
         "color": "#6366F1"
     }
 }
+
+# Асосий сарлавҳа
+st.markdown('<h1 class="main-header">🍼 Фенилкетонурия (ФКУ) Болалар учун Озукавий Аралашмалар Тизими</h1>', unsafe_allow_html=True)
 
 # Асосий контейнер
 main_container = st.container()
@@ -392,7 +382,14 @@ with main_container:
                 st.markdown("</div>", unsafe_allow_html=True)
                 
                 # Доза сони
-                doses_per_day = st.slider("Кунда неча марта олиши керак?", 3, 8, 5, key="doses_slider")
+                if 'doses_per_day' not in st.session_state:
+                    st.session_state.doses_per_day = 5
+                
+                st.session_state.doses_per_day = st.slider(
+                    "Кунда неча марта олиши керак?", 
+                    3, 8, st.session_state.doses_per_day, 
+                    key="doses_slider"
+                )
                 
                 # Нарх хисоби
                 monthly_cost = (daily_dose * 30 * prod_info['price_per_kg'] / 1000)
@@ -402,7 +399,7 @@ with main_container:
     with tab2:
         st.markdown('<h2 class="section-header">🍼 Озукавий Аралашмани Тайёрлаш</h2>', unsafe_allow_html=True)
         
-        if selected_product:
+        if 'selected_product' in locals() and selected_product:
             prod_info = products_db[selected_product]
             
             col1, col2 = st.columns(2)
@@ -431,8 +428,9 @@ with main_container:
                 
                 # Сув миқдори
                 water_ratio = st.slider("Сув/Аралашма нисбати (мл/г)", 3.0, 10.0, 5.0, 0.5)
-                water_needed = daily_dose * water_ratio
-                st.success(f"💧 **Кунлик сув эхтиёжи:** {water_needed:.0f} мл")
+                if 'daily_dose' in locals():
+                    water_needed = daily_dose * water_ratio
+                    st.success(f"💧 **Кунлик сув эхтиёжи:** {water_needed:.0f} мл")
             
             with col2:
                 st.markdown("### ⚠️ Сақлаш ва диққат талаблари:")
@@ -468,118 +466,140 @@ with main_container:
     with tab3:
         st.markdown('<h2 class="section-header">📅 Кунлик Олиш Жадвали</h2>', unsafe_allow_html=True)
         
-        if selected_product:
+        if 'selected_product' in locals() and selected_product:
             prod_info = products_db[selected_product]
-            daily_dose = weight * prod_info['daily_dose_per_kg']
-            doses_per_day = st.session_state.get("doses_slider", 5)
-            dose_per_serving = daily_dose / doses_per_day
-            
-            # Вақт жадвали
-            time_slots = {
-                "Эрталаб 07:00": "morning-badge",
-                "Нонушта 09:00": "morning-badge", 
-                "Тушликдан олдин 12:00": "day-badge",
-                "Тушлик 14:00": "day-badge",
-                "Пешинди 16:00": "day-badge",
-                "Кечки овқат 19:00": "evening-badge",
-                "Ётгунча 21:00": "night-badge"
-            }
-            
-            time_keys = list(time_slots.keys())
-            
-            st.markdown("### 🕒 Вақт жадвали:")
-            
-            schedule_data = []
-            for i in range(doses_per_day):
-                time_idx = min(i, len(time_keys)-1)
-                time_name = time_keys[time_idx]
-                badge_class = time_slots[time_name]
+            if 'daily_dose' in locals():
+                daily_dose = weight * prod_info['daily_dose_per_kg']
+                doses_per_day = st.session_state.get('doses_per_day', 5)
+                dose_per_serving = daily_dose / doses_per_day
                 
-                schedule_data.append({
-                    "Вақт": time_name,
-                    "Миқдор (г)": f"{dose_per_serving:.1f}",
-                    "Оқсил (г)": f"{(dose_per_serving * prod_info['protein_per_100g'] / 100):.1f}",
-                    "Калория": f"{(dose_per_serving * prod_info['calories_per_100g'] / 100):.0f}",
-                    "Баҳо": f"<span class='schedule-badge {badge_class}'>{time_name.split()[0]}</span>"
-                })
-            
-            # Жадвални кўрсатиш
-            schedule_df = pd.DataFrame(schedule_data)
-            st.dataframe(schedule_df, use_container_width=True)
-            
-            # График
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Оқсил тақсимоти
-                fig1 = go.Figure(data=[
-                    go.Pie(
-                        labels=[f"Доза {i+1}" for i in range(doses_per_day)],
-                        values=[dose_per_serving for _ in range(doses_per_day)],
-                        hole=0.4,
-                        marker=dict(colors=px.colors.qualitative.Set3)
+                # Вақт жадвали
+                time_slots = {
+                    "Эрталаб 07:00": "morning-badge",
+                    "Нонушта 09:00": "morning-badge", 
+                    "Тушликдан олдин 12:00": "day-badge",
+                    "Тушлик 14:00": "day-badge",
+                    "Пешинди 16:00": "day-badge",
+                    "Кечки овқат 19:00": "evening-badge",
+                    "Ётгунча 21:00": "night-badge"
+                }
+                
+                time_keys = list(time_slots.keys())
+                
+                st.markdown("### 🕒 Вақт жадвали:")
+                
+                schedule_data = []
+                for i in range(doses_per_day):
+                    time_idx = min(i, len(time_keys)-1)
+                    time_name = time_keys[time_idx]
+                    badge_class = time_slots[time_name]
+                    
+                    schedule_data.append({
+                        "Вақт": time_name,
+                        "Миқдор (г)": f"{dose_per_serving:.1f}",
+                        "Оқсил (г)": f"{(dose_per_serving * prod_info['protein_per_100g'] / 100):.1f}",
+                        "Калория": f"{(dose_per_serving * prod_info['calories_per_100g'] / 100):.0f}",
+                        "Баҳо": badge_class
+                    })
+                
+                # Жадвални кўрсатиш
+                schedule_df = pd.DataFrame(schedule_data)
+                
+                # HTML таблица яратиш
+                html_table = "<div style='background: white; padding: 1rem; border-radius: 10px;'>"
+                html_table += "<table style='width: 100%; border-collapse: collapse;'>"
+                html_table += "<tr style='background: #3B82F6; color: white;'>"
+                html_table += "<th style='padding: 10px; text-align: left;'>Вақт</th>"
+                html_table += "<th style='padding: 10px; text-align: left;'>Миқдор (г)</th>"
+                html_table += "<th style='padding: 10px; text-align: left;'>Оқсил (г)</th>"
+                html_table += "<th style='padding: 10px; text-align: left;'>Калория</th>"
+                html_table += "</tr>"
+                
+                for i, row in enumerate(schedule_data):
+                    bg_color = "#F8FAFC" if i % 2 == 0 else "#FFFFFF"
+                    html_table += f"<tr style='background: {bg_color};'>"
+                    html_table += f"<td style='padding: 10px;'>{row['Вақт']}</td>"
+                    html_table += f"<td style='padding: 10px;'>{row['Миқдор (г)']}</td>"
+                    html_table += f"<td style='padding: 10px;'>{row['Оқсил (г)']}</td>"
+                    html_table += f"<td style='padding: 10px;'>{row['Калория']}</td>"
+                    html_table += "</tr>"
+                
+                html_table += "</table></div>"
+                st.markdown(html_table, unsafe_allow_html=True)
+                
+                # График
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Оқсил тақсимоти
+                    fig1 = go.Figure(data=[
+                        go.Pie(
+                            labels=[f"Доза {i+1}" for i in range(doses_per_day)],
+                            values=[dose_per_serving for _ in range(doses_per_day)],
+                            hole=0.4,
+                            marker=dict(colors=px.colors.qualitative.Set3)
+                        )
+                    ])
+                    
+                    fig1.update_layout(
+                        title=f"Кунлик доза тақсимоти",
+                        height=400
                     )
-                ])
+                    st.plotly_chart(fig1, use_container_width=True)
                 
-                fig1.update_layout(
-                    title=f"Кунлик доза тақсимоти",
-                    height=400
+                with col2:
+                    # Вақт бўйича график
+                    times = [d['Вақт'].split()[-1] for d in schedule_data]
+                    amounts = [float(d['Миқдор (г)']) for d in schedule_data]
+                    
+                    fig2 = go.Figure(data=[
+                        go.Bar(
+                            x=times,
+                            y=amounts,
+                            marker_color=prod_info['color'],
+                            text=[f"{amt}г" for amt in amounts],
+                            textposition='auto'
+                        )
+                    ])
+                    
+                    fig2.update_layout(
+                        title="Вақт бўйича дозалар",
+                        xaxis_title="Вақт",
+                        yaxis_title="Миқдор (г)",
+                        height=400
+                    )
+                    st.plotly_chart(fig2, use_container_width=True)
+                
+                # Хафталик жадвал
+                st.markdown("### 📆 Хафталик мониторинг:")
+                week_days = ["Душанба", "Сешанба", "Чоршанба", "Пайшанба", "Жума", "Шанба", "Якшанба"]
+                
+                week_data = []
+                for day in week_days:
+                    week_data.append({
+                        "Кун": day,
+                        "Миқдор (г)": f"{daily_dose:.1f}",
+                        "Оқсил (г)": f"{(daily_dose * prod_info['protein_per_100g'] / 100):.1f}",
+                        "Ичди": True,
+                        "Эслатма": ""
+                    })
+                
+                week_df = pd.DataFrame(week_data)
+                edited_week_df = st.data_editor(
+                    week_df,
+                    column_config={
+                        "Ичди": st.column_config.CheckboxColumn(
+                            "Ичди",
+                            help="Кунлик доза ичилдими?",
+                            default=True
+                        ),
+                        "Эслатма": st.column_config.TextColumn(
+                            "Эслатма",
+                            help="Қўшимча эслатмалар"
+                        )
+                    },
+                    use_container_width=True
                 )
-                st.plotly_chart(fig1, use_container_width=True)
-            
-            with col2:
-                # Вақт бўйича график
-                times = [d['Вақт'].split()[-1] for d in schedule_data]
-                amounts = [float(d['Миқдор (г)']) for d in schedule_data]
-                
-                fig2 = go.Figure(data=[
-                    go.Bar(
-                        x=times,
-                        y=amounts,
-                        marker_color=prod_info['color'],
-                        text=[f"{amt}г" for amt in amounts],
-                        textposition='auto'
-                    )
-                ])
-                
-                fig2.update_layout(
-                    title="Вақт бўйича дозалар",
-                    xaxis_title="Вақт",
-                    yaxis_title="Миқдор (г)",
-                    height=400
-                )
-                st.plotly_chart(fig2, use_container_width=True)
-            
-            # Хафталик жадвал
-            st.markdown("### 📆 Хафталик мониторинг:")
-            week_days = ["Душанба", "Сешанба", "Чоршанба", "Пайшанба", "Жума", "Шанба", "Якшанба"]
-            
-            week_data = []
-            for day in week_days:
-                week_data.append({
-                    "Кун": day,
-                    "Миқдор (г)": f"{daily_dose:.1f}",
-                    "Оқсил (г)": f"{(daily_dose * prod_info['protein_per_100g'] / 100):.1f}",
-                    "Ичди": "✅",
-                    "Эслатма": ""
-                })
-            
-            week_df = pd.DataFrame(week_data)
-            edited_week_df = st.data_editor(
-                week_df,
-                column_config={
-                    "Ичди": st.column_config.CheckboxColumn(
-                        "Ичди",
-                        help="Кунлик доза ичилдими?",
-                        default=True
-                    ),
-                    "Эслатма": st.column_config.TextColumn(
-                        "Эслатма",
-                        help="Қўшимча эслатмалар"
-                    )
-                },
-                use_container_width=True
-            )
     
     # 4-таб: Хисоботлар
     with tab4:
@@ -591,34 +611,40 @@ with main_container:
             # Кунлик хисобот
             st.markdown("### 📅 Кунлик хисобот")
             
-            report_date = st.date_input("Хисобот санаси", date.today())
+            report_date = st.date_input("Хисобот санаси", date.today(), key="report_date")
             
-            daily_report = {
-                "Бола исми": child_name,
-                "Сана": report_date.strftime("%Y-%m-%d"),
-                "Ёши": f"{age_years} йил {age_months} ой",
-                "Огирлик": f"{weight} кг",
-                "Озукавий аралашма": selected_product,
-                "Кунлик миқдор": f"{daily_dose:.1f} г",
-                "Оқсил": f"{(daily_dose * prod_info['protein_per_100g'] / 100):.1f} г",
-                "Калория": f"{(daily_dose * prod_info['calories_per_100g'] / 100):.0f} ккал",
-                "ФА даражаси": f"{phe_level} мкмоль/л",
-                "Эслатма": st.text_area("Кунлик эслатма", "Бола яхши ичди, иштаҳаси яхши")
-            }
-            
-            # Хисоботни кўрсатиш
-            for key, value in daily_report.items():
-                if key != "Эслатма":
+            if 'selected_product' in locals() and selected_product:
+                prod_info = products_db[selected_product]
+                daily_dose = weight * prod_info['daily_dose_per_kg']
+                
+                daily_report = {
+                    "Бола исми": child_name,
+                    "Сана": report_date.strftime("%Y-%m-%d"),
+                    "Ёши": f"{age_years} йил {age_months} ой",
+                    "Огирлик": f"{weight} кг",
+                    "Озукавий аралашма": selected_product,
+                    "Кунлик миқдор": f"{daily_dose:.1f} г",
+                    "Оқсил": f"{(daily_dose * prod_info['protein_per_100g'] / 100):.1f} г",
+                    "Калория": f"{(daily_dose * prod_info['calories_per_100g'] / 100):.0f} ккал",
+                    "ФА даражаси": f"{phe_level} мкмоль/л"
+                }
+                
+                # Хисоботни кўрсатиш
+                for key, value in daily_report.items():
                     st.info(f"**{key}:** {value}")
-            
-            # PDF юклаш
-            report_text = json.dumps(daily_report, indent=2, ensure_ascii=False)
-            st.download_button(
-                label="📥 Кунлик хисоботни юклаб олиш (JSON)",
-                data=report_text,
-                file_name=f"FKU_daily_report_{child_name}_{report_date.strftime('%Y%m%d')}.json",
-                mime="application/json"
-            )
+                
+                # Қўшимча эслатма
+                note = st.text_area("Кунлик эслатма", "Бола яхши ичди, иштаҳаси яхши", key="daily_note")
+                daily_report["Эслатма"] = note
+                
+                # PDF юклаш
+                report_text = json.dumps(daily_report, indent=2, ensure_ascii=False)
+                st.download_button(
+                    label="📥 Кунлик хисоботни юклаб олиш (JSON)",
+                    data=report_text,
+                    file_name=f"FKU_daily_report_{child_name}_{report_date.strftime('%Y%m%d')}.json",
+                    mime="application/json"
+                )
         
         with col2:
             # Ойлик хисобот
@@ -627,7 +653,8 @@ with main_container:
             month = st.selectbox("Ойни танланг", 
                                 ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
                                  "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"],
-                                index=date.today().month - 1)
+                                index=date.today().month - 1,
+                                key="month_select")
             
             # Статистика маълумотлари
             months_data = {
@@ -658,29 +685,32 @@ with main_container:
             st.plotly_chart(fig3, use_container_width=True)
             
             # Харажат хисоби
-            monthly_cost = (daily_dose * 30 * prod_info['price_per_kg'] / 1000)
-            yearly_cost = monthly_cost * 12
-            
-            st.metric("💵 Ойлик харажат", f"{monthly_cost:,.0f} сўм")
-            st.metric("💰 Йиллик харажат", f"{yearly_cost:,.0f} сўм")
-            
-            # Excel хисобот
-            excel_df = pd.DataFrame([{
-                "Сана": date.today().strftime("%Y-%m-%d"),
-                "Бола исми": child_name,
-                "Аралашма": selected_product,
-                "Кунлик миқдор (г)": daily_dose,
-                "Кунлик харажат": daily_dose * prod_info['price_per_kg'] / 1000,
-                "ФА даражаси": phe_level
-            }])
-            
-            csv = excel_df.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(
-                label="📊 Excel хисоботни юклаб олиш (CSV)",
-                data=csv,
-                file_name=f"FKU_report_{child_name}_{date.today().strftime('%Y%m%d')}.csv",
-                mime="text/csv"
-            )
+            if 'selected_product' in locals() and selected_product:
+                prod_info = products_db[selected_product]
+                daily_dose = weight * prod_info['daily_dose_per_kg']
+                monthly_cost = (daily_dose * 30 * prod_info['price_per_kg'] / 1000)
+                yearly_cost = monthly_cost * 12
+                
+                st.metric("💵 Ойлик харажат", f"{monthly_cost:,.0f} сўм")
+                st.metric("💰 Йиллик харажат", f"{yearly_cost:,.0f} сўм")
+                
+                # Excel хисобот
+                excel_df = pd.DataFrame([{
+                    "Сана": date.today().strftime("%Y-%m-%d"),
+                    "Бола исми": child_name,
+                    "Аралашма": selected_product,
+                    "Кунлик миқдор (г)": daily_dose,
+                    "Кунлик харажат": daily_dose * prod_info['price_per_kg'] / 1000,
+                    "ФА даражаси": phe_level
+                }])
+                
+                csv = excel_df.to_csv(index=False).encode('utf-8-sig')
+                st.download_button(
+                    label="📊 Excel хисоботни юклаб олиш (CSV)",
+                    data=csv,
+                    file_name=f"FKU_report_{child_name}_{date.today().strftime('%Y%m%d')}.csv",
+                    mime="text/csv"
+                )
     
     # 5-таб: Заҳира бошқаруви
     with tab5:
@@ -694,7 +724,7 @@ with main_container:
             if stock > 0:
                 prod_info = products_db.get(product, {})
                 price = prod_info.get('price_per_kg', 0)
-                package_weight = 0.4  # Фарз қилинади: ҳар бир пакет 400г
+                package_weight = 0.4  # Ҳар бир пакет 400г
                 stock_kg = stock * package_weight
                 stock_cost = stock_kg * price / 1000
                 total_cost += stock_cost
@@ -707,56 +737,58 @@ with main_container:
                     "Статус": "✅ Етарли" if stock > 5 else "⚠️ Кам" if stock > 2 else "⛔ Тугаш"
                 })
         
-        stock_df = pd.DataFrame(stock_data)
-        
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            st.dataframe(stock_df, use_container_width=True)
-        
-        with col2:
-            st.metric("📦 Жами пакетлар", sum(product_stock.values()))
-            st.metric("💰 Жами қиймат", f"{total_cost:,.0f} сўм")
-            st.metric("📅 Етарлилик", f"{sum(product_stock.values()) // 3} кун")
-        
-        # Заҳира таклифи
-        st.markdown("### 📋 Яқинда тугаш таклифи:")
-        
-        low_stock = [p for p, s in product_stock.items() if s <= 3]
-        if low_stock:
-            for product in low_stock:
-                st.warning(f"**{product}** заҳираси кам: {product_stock[product]} пакет қолди")
-        else:
-            st.success("✅ Барча аралашмалар заҳираси етарли")
-        
-        # Буйртма қилиш
-        st.markdown("### 🛍️ Янгӣ аралашма буйртмаси:")
-        
-        order_col1, order_col2, order_col3 = st.columns(3)
-        
-        with order_col1:
-            order_product = st.selectbox("Аралашма", list(products_db.keys()))
-        
-        with order_col2:
-            order_quantity = st.number_input("Пакетлар сони", 1, 100, 5)
-        
-        with order_col3:
-            order_priority = st.selectbox("Зарбурият", ["Одатда", "Ошкор", "Жуда ошкор"])
-        
-        if st.button("📝 Буйртмани яратиш"):
-            st.success(f"✅ {order_quantity} та {order_product} пакети буйртма қилинди!")
+        if stock_data:
+            stock_df = pd.DataFrame(stock_data)
             
-            # Буйртма тафсилотлари
-            prod_info = products_db[order_product]
-            order_cost = order_quantity * 0.4 * prod_info['price_per_kg'] / 1000
+            col1, col2 = st.columns([3, 1])
             
-            st.info(f"""
-            **Буйртма тафсилотлари:**
-            - Аралашма: {order_product}
-            - Миқдор: {order_quantity} пакет ({order_quantity * 0.4:.1f} кг)
-            - Нархи: {order_cost:,.0f} сўм
-            - Етиб бориш муддати: 3-5 иш куни
-            """)
+            with col1:
+                st.dataframe(stock_df, use_container_width=True)
+            
+            with col2:
+                st.metric("📦 Жами пакетлар", sum(product_stock.values()))
+                st.metric("💰 Жами қиймат", f"{total_cost:,.0f} сўм")
+                days_supply = sum(product_stock.values()) // 3
+                st.metric("📅 Етарлилик", f"{days_supply} кун")
+            
+            # Заҳира таклифи
+            st.markdown("### 📋 Яқинда тугаш таклифи:")
+            
+            low_stock = [p for p, s in product_stock.items() if s <= 3]
+            if low_stock:
+                for product in low_stock:
+                    st.warning(f"**{product}** заҳираси кам: {product_stock[product]} пакет қолди")
+            else:
+                st.success("✅ Барча аралашмалар заҳираси етарли")
+            
+            # Буйртма қилиш
+            st.markdown("### 🛍️ Янгӣ аралашма буйртмаси:")
+            
+            order_col1, order_col2, order_col3 = st.columns(3)
+            
+            with order_col1:
+                order_product = st.selectbox("Аралашма", list(products_db.keys()), key="order_product")
+            
+            with order_col2:
+                order_quantity = st.number_input("Пакетлар сони", 1, 100, 5, key="order_quantity")
+            
+            with order_col3:
+                order_priority = st.selectbox("Зарбурият", ["Одатда", "Ошкор", "Жуда ошкор"], key="order_priority")
+            
+            if st.button("📝 Буйртмани яратиш", key="create_order"):
+                st.success(f"✅ {order_quantity} та {order_product} пакети буйртма қилинди!")
+                
+                # Буйртма тафсилотлари
+                prod_info = products_db[order_product]
+                order_cost = order_quantity * 0.4 * prod_info['price_per_kg'] / 1000
+                
+                st.info(f"""
+                **Буйртма тафсилотлари:**
+                - Аралашма: {order_product}
+                - Миқдор: {order_quantity} пакет ({order_quantity * 0.4:.1f} кг)
+                - Нархи: {order_cost:,.0f} сўм
+                - Етиб бориш муддати: 3-5 иш куни
+                """)
     
     # 6-таб: Қўшимча маълумотлар
     with tab6:
@@ -839,53 +871,50 @@ with main_container:
             st.info("**🏥 Клиника:**\nБола шифокорлиги маркази\n📍 Тошкент, Миробод тумани")
 
 # Streamlit Cloud тарзида ишлаш учун настройка
-def main():
-    # Сессия стайтини инициализация қилиш
-    if 'page' not in st.session_state:
-        st.session_state.page = 'home'
-    
-    # Юклаш индикатори
-    with st.spinner("Маълумотлар юкланмоқда..."):
-        time.sleep(0.5)
-    
-    # Қўшимча имкониятлар
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### ⚙️ Настройкалар")
-    
-    # Тема
-    theme = st.sidebar.selectbox("Тема", ["Очиқ", "Қоронғи"], index=0)
-    
-    # Тил (симуляция)
-    language = st.sidebar.selectbox("Тил", ["Ўзбекча", "Русча", "Инглизча"], index=0)
-    
-    # Маълумотларни санглаш
-    if st.sidebar.button("♻️ Барча маълумотларни янгилаш"):
-        st.rerun()
-    
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🌐 Streamlit Cloud")
-    st.sidebar.info("""
-    Дастурни Streamlit Cloud-га жойлаштириш учун:
-    
-    1. GitHub репозиторий яратинг
-    2. app.py файлини юкланг
-    3. streamlit.io га киринг
-    4. New app танланг
-    5. Репозиторийни танланг
-    
-    Дастур автоматик равишда жойлашади!
-    """)
-    
-    # Footer
-    st.markdown("---")
-    st.markdown("""
-    <div style="text-align: center; color: #6B7280; padding: 1rem;">
-        <p>© 2024 ФКУ Озукавий Аралашмалар Тизими | 
-        <a href="#" style="color: #3B82F6;">Махфийлик сиёсати</a> | 
-        <a href="#" style="color: #3B82F6;">Фойдаланиш шартлари</a></p>
-        <p style="font-size: 0.9rem;">Бу дастур фақат маълумот олиш учун. Ҳар қандай тиббий қарор учун шифокорга мурожаат қилинг.</p>
-    </div>
-    """, unsafe_allow_html=True)
+st.sidebar.markdown("---")
+st.sidebar.markdown("### ⚙️ Настройкалар")
 
-if __name__ == "__main__":
-    main()
+# Тема
+theme = st.sidebar.selectbox("Тема", ["Очиқ", "Қоронғи"], index=0)
+
+# Тил (симуляция)
+language = st.sidebar.selectbox("Тил", ["Ўзбекча", "Русча", "Инглизча"], index=0)
+
+# Маълумотларни санглаш
+if st.sidebar.button("♻️ Барча маълумотларни янгилаш"):
+    st.rerun()
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🌐 Streamlit Cloud")
+st.sidebar.info("""
+Дастурни Streamlit Cloud-га жойлаштириш учун:
+
+1. GitHub репозиторий яратинг
+2. app.py файлини юкланг
+3. streamlit.io га киринг
+4. New app танланг
+5. Репозиторийни танланг
+
+Дастур автоматик равишда жойлашади!
+""")
+
+# Footer
+st.markdown("---")
+st.markdown("""
+<div style="text-align: center; color: #6B7280; padding: 1rem;">
+    <p>© 2024 ФКУ Озукавий Аралашмалар Тизими | 
+    <a href="#" style="color: #3B82F6;">Махфийлик сиёсати</a> | 
+    <a href="#" style="color: #3B82F6;">Фойдаланиш шартлари</a></p>
+    <p style="font-size: 0.9rem;">Бу дастур фақат маълумот олиш учун. Ҳар қандай тиббий қарор учун шифокорга мурожаат қилинг.</p>
+</div>
+""", unsafe_allow_html=True)
+
+# requirements.txt файли учун тавсия
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 📦 Зарур пакетлар")
+st.sidebar.code("""
+streamlit>=1.28.0
+pandas>=2.0.0
+plotly>=5.17.0
+pillow>=10.0.0
+""")
